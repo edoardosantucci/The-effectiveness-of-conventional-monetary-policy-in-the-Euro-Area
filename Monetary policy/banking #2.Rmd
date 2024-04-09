@@ -1,0 +1,417 @@
+---
+title: 'banking #2'
+output: html_document
+date: "2023-04-09"
+---
+Our analysis has the purpose to inspect the effectiveness of conventional monetary policy in the euro area. In order to do that we considered the MRO rate as the main tool of monetary policy transmission and many other variables have been considered in order to check the impact of its change in the euro area banks. Initially we started by considering the cost of borrowings for corporations and households, our objective was to see how sensitive they are to a MRO change, this has been done by running several regression lines, inspecting the correlation, the causality and the cross-correlation. Then we checked for this reaction in the loan volumes ... 
+Since monetary policy has the goal to affect the money supply side in order to see how effective is the ecb policy we pursued our analysis by picking the monetary aggregates and check for their relation with the MRO. 
+
+```{r}
+library(readxl)
+library(xts)
+library(ggplot2)
+library(ggpubr)
+library(vars)
+library(tidyverse)
+library(eurostat)
+library(leaflet)
+library(sf)
+library(scales)
+library(cowplot)
+library(ggthemes)
+library(dplyr)
+library(tidyr)
+
+
+```
+
+
+```{r}
+d <- read_excel("C:/Users/Lenovo/Desktop/data.xlsx", sheet = 1)
+MRO_daily <- read_excel("C:/Users/Lenovo/Desktop/data.xlsx", sheet = 2)
+MRO_monthly <- apply.monthly(MRO_daily, mean)
+MRO_monthly <- rev(MRO_monthly$MRO_daily)
+d <- cbind(d, MRO_monthly)
+d$Periods <- as.Date(paste0(substring(d$Periods, 1, 4), "-", match(substring(d$Periods, 5), month.abb),"-01"))
+
+plot_MRO <- ggplot(data = d) + 
+    geom_line(aes(x = Periods, y = MRO_monthly)) +
+    labs(x = "Periods", y = "MRO(%)") +
+    scale_color_manual(values = c("MRO" = "black")) +
+    labs(title = "MRO trend over years") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+print(plot_MRO)
+```
+
+In order to check the relationship between MRO variations and the cost of borrowing for corporations across the various countries we performed some linear regression. As independent variable we set the MRO coefficient computed monthly and as dependent variable the other coefficients, progressively. The beta coefficient will measure the effect on y-variable in response to a change in the x-variable. 
+
+```{r}
+regression_models <- list()
+for (i in 2:(ncol(d)-1)) {
+  model <- lm(data = d, as.numeric(d[,i]) ~ MRO_monthly)
+  regression_models[[i-1]] <- model
+}
+```
+
+Now it is convenient to insert all the estimated coefficients in a new data frame in order to get a better visualization. TISSI VEDI. 
+
+```{r}
+matrix_coeff <- matrix(nrow = 19, ncol = 2)
+coeff_data <- data.frame(matrix_coeff)
+for (i in 1:nrow(coeff_data)){
+  coeff_data[i,] <- coef(regression_models[[i]])
+}
+coeff_data <- cbind(coeff_data, colnames(d[,2:20]))
+colnames(coeff_data) <- c("Intercept", "MRO_coefficient", "Countries")
+coeff_data
+```
+
+Then to visualize the outcome we started plotting the most important countries and the MRO in the same graph. VEDI PERCHE PAESI
+
+```{r}
+plot_cob_cor <- ggplot(data = d) + 
+    geom_line(aes(x = Periods, y = MRO_monthly, color = "MRO")) +
+    geom_line(aes(x = Periods, y = as.numeric(cob_Germany_cor), color = "Germany"))+
+    geom_line(aes(x = Periods, y = as.numeric(cob_Spain_cor), color = "Spain"))+
+    geom_line(aes(x = Periods, y = as.numeric(cob_Finland_cor), color = "Finland"))+
+    geom_line(aes(x = Periods, y = as.numeric(cob_France_cor), color = "France"))+
+    geom_line(aes(x = Periods, y = as.numeric(cob_Italy_cor), color = "Italy")) +
+    labs(x = "Periods", y = "Cost Of Borrowing ", color = "Country") +
+    scale_color_manual(values = c("MRO" = "black", "Germany" = "red", "Spain" = "green", "Finland" = "blue", "France" = "orange", "Italy" = "purple")) +
+    labs(title = "Cost of Borrowing Corporation by Country") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+print(plot_cob_cor)
+```
+
+The same procedure have been done for the cost of borrowing referred to households for house purchase. 
+    
+```{r}
+d1 <- read_excel("C:/Users/Lenovo/Desktop/data.xlsx", sheet = 3)
+d1 <- cbind(d1, MRO_monthly)
+d1$Periods <- as.Date(paste0(substring(d1$Periods, 1, 4), "-", match(substring(d1$Periods, 5), month.abb),"-01"))
+```
+
+Regression models:
+
+```{r}
+regression_models1 <- list()
+for (i in 2:(ncol(d1)-1)) {
+  model1 <- lm(data = d, as.numeric(d1[,i]) ~ MRO_monthly)
+  regression_models1[[i-1]] <- model1
+}
+```
+
+Coefficient matrix:
+
+```{r}
+coeff_data1 <- data.frame(matrix_coeff)
+for (i in 1:nrow(coeff_data1)){
+  coeff_data1[i,] <- coef(regression_models1[[i]])
+}
+coeff_data1 <- cbind(coeff_data1, colnames(d1[,2:20]))
+colnames(coeff_data1) <- c("Intercept", "MRO_coefficient", "Countries")
+coeff_data1
+```
+
+
+```{r}
+plot_cob_hou <- ggplot(data = d1) + 
+  geom_line(aes(x = Periods, y = MRO_monthly, color = "MRO")) +
+  geom_line(aes(x = Periods, y = as.numeric(cob_Germany_h), color = "Germany"))+
+  geom_line(aes(x = Periods, y = as.numeric(cob_Spain_h), color = "Spain"))+
+  geom_line(aes(x = Periods, y = as.numeric(cob_Finland_h), color = "Finland"))+
+  geom_line(aes(x = Periods, y = as.numeric(cob_France_h), color = "France"))+
+  geom_line(aes(x = Periods, y = as.numeric(cob_Italy_h), color = "Italy")) +
+  labs(x = "Periods", y = "Cost Of Borrowing ", color = "Country") +
+  scale_color_manual(values = c("MRO" = "black", "Germany" = "red", "Spain" = "green", "Finland" = "blue", "France" = "orange", "Italy" = "purple")) +
+  labs(title = "Cost of Borrowing Household by Country") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+print(plot_cob_hou)
+```
+
+The linear regression model is a powerful tool to inspect the relationship between the MRO rate and the ones which are chosen by us AGGIUNGERE. The MRO coefficient measures how the dependent variable change following a change in the MRO rate. Nevertheless, the results of this analysis are not so much relevant, since the MRO_coefficients are all around 0.5 meaning not a strong connection and so not an effective transmission of the monetary policy. We moved on by testing this relation with the Pearson correlation coefficient. 
+
+The procedure will be performed for both the categories considered so far: cost of borrowing for corporations and for households for house purchase. 
+
+Cost of borrowing for corporations:
+```{r}
+data_numeric_cor <- lapply(d[,2:21], as.numeric)
+correlation_cor <- data.frame(matrix(ncol = 1, nrow = 19))
+test_cor <- list()
+p_value_cor <- c()
+for (i in 1:19){
+  test <- cor.test(data_numeric_cor[[20]], data_numeric_cor[[i]], 
+  method = "pearson")
+  test_cor[[i]] <- test
+  correlation_cor[i,] <- test_cor[[i]]$estimate
+  p_value <- test_cor[[i]]$p.value
+  p_value_cor[i] <- p_value
+}
+correlation_cor <- cbind(correlation_cor, p_value_cor, coeff_data$Countries)
+colnames(correlation_cor) <- c("Correlation_corporation","p_value", "Countries")
+print(correlation_cor)
+```
+
+GENERALE
+
+```{r}
+SHP_0 <- get_eurostat_geospatial(resolution = 10, 
+                                 nuts_level = 0, 
+                                 year = 2016)
+
+SHP_0 %>% 
+  ggplot() +
+  geom_sf()
+
+EU27 <- eu_countries %>% 
+  filter(code != 'UK') %>% 
+  select(geo = code, name)
+
+SHP_27 <- SHP_0 %>% 
+  select(geo = NUTS_ID, geometry) %>% 
+  inner_join(EU27, by = "geo") %>% 
+  arrange(geo) %>% 
+  st_as_sf()
+
+SHP_27 %>% 
+  ggplot() +
+  geom_sf() +
+  scale_x_continuous(limits = c(-10, 35)) +
+  scale_y_continuous(limits = c(35, 65))
+```
+
+```{r}
+correlation_cor$geo = c('AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK')
+
+corr_EU <- correlation_cor %>% 
+  select(geo, Correlation_corporation) %>% 
+  inner_join(SHP_27, by = "geo") %>% 
+  st_as_sf() %>%
+  rename(`Correlation Corporation` = Correlation_corporation)
+
+Corr_PLot_Eu <- corr_EU %>% 
+  ggplot(aes(fill = `Correlation Corporation`)) +
+  geom_sf() +
+  scale_x_continuous(limits = c(-10, 35)) +
+  scale_y_continuous(limits = c(35, 65)) +
+  scale_fill_continuous(limits = c(-1, 1), low = "blue", high = "red", na.value = "grey") +
+  theme_void() +
+  ggtitle("Correlation between MRO and COB to NFC")
+
+print(Corr_PLot_Eu)
+```
+
+Cost of borrowing for households for house purchase:
+
+```{r}
+data_numeric_h <- lapply(d1[,2:21], as.numeric)
+correlation_h <- data.frame(matrix(ncol = 1, nrow = 19))
+test_h <- list()
+p_value_h <- c()
+for (i in 1:19){
+  test <- cor.test(data_numeric_h[[20]], data_numeric_h[[i]], 
+  method = "pearson")
+  test_h[[i]] <- test
+  correlation_h[i,] <- test_h[[i]]$estimate
+  p_value <- test_h[[i]]$p.value
+  p_value_h[i] <- p_value
+}
+correlation_h <- cbind(correlation_h, p_value_h, coeff_data1$Countries)
+colnames(correlation_h) <- c("Correlation_households","p_value", "Countries")
+```
+
+```{r}
+correlation_h$geo = c('AT', 'BE', 'CY', 'DE', 'EE', 'ES', 'FI', 'FR', 'GR', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PT', 'SI', 'SK')
+
+house_EU <- correlation_h %>% 
+  select(geo, Correlation_households) %>% 
+  inner_join(SHP_27, by = "geo") %>% 
+  st_as_sf() %>%
+  rename(`Correlation Households` = Correlation_households)
+
+House_PLot_Eu <- house_EU %>% 
+  ggplot(aes(fill = `Correlation Households`)) +
+  geom_sf() +
+  scale_x_continuous(limits = c(-10, 35)) +
+  scale_y_continuous(limits = c(35, 65)) +
+  scale_fill_continuous(limits = c(-1, 1), low = "blue", high = "red", na.value = "grey") +
+  theme_void() +
+  ggtitle("Correlation between Cost of Borrowing for Households in EU")
+
+print(House_PLot_Eu)
+```
+
+Since we certainly know that correlation and causality are two different concepts it may be interesting to detect if, in case of low correlation, we performed the Granger causality test. The null hypothesis states that y do not Granger-cause x, if we manage to reject the H0 it means there is granger causality between the two variables, we looked at the p-value to assess this. 
+
+```{r}
+p_values <- matrix(nrow=7, ncol=1)
+country_codes <- c("Cyprus", "Spain", "Greece", "Italy", "Malta", "Netherlands", "Slovenia")
+
+for (i in 1:length(country_codes)) {
+  
+  cob <- ts(as.numeric(d[[paste0("cob_", country_codes[i], "_cor")]]))
+  TMRO <- ts(MRO_monthly)
+  
+  c <- data.frame(x = TMRO, y = cob) 
+  
+  model <- VAR(c, p = 2)
+  
+  granger_test <- causality(model, cause = "y")
+  
+  p_values[i,1] <- granger_test$Granger$p.value
+  
+}
+
+colnames(p_values) <- c("P Value")
+rownames(p_values) <- country_codes
+
+print(round(p_values, 4))
+```
+
+To detect the correlation between two time series at different lags we decided to perform the cross-correlation plot, it measures the similarity between two time series as a function of the time lag applied to one of them.
+The analysis purses by distinguishing the two groups considered so far. 
+
+Cross-correlation for corporations:
+
+```{r}
+data_numeric_cor <- data.frame(data_numeric_cor)
+data_numeric_cor <- data_numeric_cor[, -12]
+aggregated_data <- rowMeans(data_numeric_cor)
+time_series_agg <- ts(aggregated_data)
+ccf_result <- ccf(TMRO, time_series_agg,lag.max = 7)
+```
+
+Monetary aggregates
+
+```{r}
+
+# Read data
+aggregate <- read_excel("C:/Users/Lenovo/Desktop/data.xlsx", sheet = 5)
+
+# Fit linear regression models
+model1 <- lm(M1 ~ MRO, data = aggregate)
+model2 <- lm(M2 ~ MRO, data = aggregate)
+model3 <- lm(M3 ~ MRO, data = aggregate)
+
+# Create a data frame for the connected scatter plot
+df <- data.frame(MRO = aggregate$MRO, M1 = aggregate$M1, M2 = aggregate$M2, M3 = aggregate$M3)
+
+# Reshape the data to long format for ggplot2
+df_long <- tidyr::gather(df, key = "Variable", value = "Value", -MRO)
+
+# Visualize the relationship between M1, M2, M3, and MRO as a connected scatter plot
+gg <- ggplot(df_long, aes(x = as.numeric(MRO), y = Value, color = Variable, group = Variable)) +
+  geom_line(size = 0.8, color = "black") +
+  geom_point(size = 2) +
+  labs(x = "MRO%", y = "M value (bilions of euro)", color = "Variable") +
+  scale_color_manual(values = c("red", "blue", "green"), labels = c("M1", "M2", "M3")) +
+  ggtitle("Relationship between MRO and M values") +
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(color = "grey"),
+        plot.title = element_text(color = "black", size = 16, face = "bold"),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+print(gg)
+```
+
+
+```{r}
+data <- read_excel("C:/Users/Lenovo/Desktop/data.xlsx", sheet = 7)
+
+aggregate$MRO <- as.factor(aggregate$MRO)
+model <- lm(M1 ~ MRO, data = aggregate)
+summary(model)
+model1 <- lm(M2 ~ MRO, data = aggregate)
+summary(model1)
+model2 <- lm(M3 ~ MRO, data = aggregate)
+summary(model2)
+
+data <- data %>%
+  mutate(M1 = M1 / 1000)
+data <- data %>%
+  mutate(M2 = M2 / 1000)
+data <- data %>%
+  mutate(M3 = M3 / 1000)
+print(data)
+```
+
+
+```{r}
+data_long1 <- gather(data, variable, value, -MRO)
+ggplot(data_long1, aes(MRO, fill = variable, y = value)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.1) +
+  scale_fill_manual(values = c("#00AFBB", "#E7B800", "#FC4E07")) +
+  labs(title = "Relation between aggregates' Beta and MRO", x = "MRO(%)", y = "Value (in bilions of euro)") +
+  theme_minimal()
+print(data_long1)
+```
+
+Visualize the relationship between M1, M2, M3, and MRO as a connected scatter plot
+
+```{r}
+data_volumes <- read_excel("C:/Users/Lenovo/Desktop/data.xlsx", sheet = 6)
+data_volumes$period = as.Date(paste0(substring(data_volumes$period,1, 4), '-', match(substring(data_volumes$period, 5), month.abb), '-01'))
+
+plot_volumes <- ggplot(data_volumes, aes(x = period)) +
+  geom_line(aes(y = germania, color = "Germany")) + 
+  geom_line(aes(y = finlandia, color = "Finland")) + 
+  geom_line(aes(y = spagna, color = "Spain")) + 
+  geom_line(aes(y = francia, color = "France")) + 
+  geom_line(aes(y = italia, color = "Italy")) + 
+  geom_line(aes(y = MRO*20000, color = "MRO"), size = 1) +
+  scale_color_manual(values = c("MRO" = "black", "Germany" = "red", "Spain" = "green", "Finland" = "blue", "France" = "orange", "Italy" = "purple"))+ 
+  ggtitle("Comparison between total loans and MRO (2014 - 2023)")+
+    scale_y_continuous(name = "Loan Volumes mln??? ", sec.axis = sec_axis(~./20000, name = "MRO(%)"))+
+  theme_minimal()
+print(plot_volumes)
+```
+
+
+```{r}
+d4 <- read_excel("C:/Users/Lenovo/Desktop/data.xlsx", sheet = 4)
+d5 <- d4[,-1]
+d5 <- apply(d5, 2, as.numeric)
+d5[is.na(d5)] <- 0
+
+i <- 1
+ii <- 2
+iii <- 3
+
+sum <- data.frame(matrix(0,nrow = 110, ncol = 3))
+
+for (ll in 1:18){
+  
+  sum[,1] <- sum[,1]+ d5[,i] 
+  sum[,2] <- sum[,2]+ d5[,ii]  
+  sum[,3] <- sum[,3]+ d5[,iii]  
+  
+  
+  i <- i +3
+  ii <- ii +3 
+  iii <- iii +3 
+}
+sum <- cbind(sum, d4$Periods)
+colnames(sum) <- c("x1","x2","x3","x4")
+sum$x4 <- as.Date(paste0(substring(sum$x4, 1, 4), "-", match(substring(sum$x4, 5), month.abb),"-01"))
+sum[,4]<- sum[110:1,4]
+
+sum$x5 <- MRO_monthly
+sum[,5] <- sum[110:1,5]
+colnames(sum) <- c("x1","x2","x3","x4","x5")
+
+plot_volumes_2 <- ggplot(sum)+
+  geom_line(aes(x = x4, y = x1, color = "corporation"))+
+  geom_line(aes(x = x4, y = x2, color = "consumption"))+
+  geom_line(aes(x = x4, y = x3, color = "house purchases"))+
+  geom_line(aes(x = x4, y = x5*50000, color = "MRO")) +
+  labs(title = "Loan Volumes by category vs MRO rate over time",x = "Time",y = "Volumes....unit")+
+  scale_y_continuous(name = "Loan Volumes mln €", sec.axis = sec_axis(~ ./50000, name = "MRO %" ))
+print(plot_volumes_2)
+```
+
+
+```{r}
